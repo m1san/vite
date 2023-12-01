@@ -149,7 +149,11 @@ const processNodeUrl = (
         htmlPath === '/index.html')
     ) {
       const devBase = config.base
-      const fullUrl = path.posix.join(devBase, url)
+      // prevent double base prefix when resolving absolute URLs with a custom dev base without origin
+      const fullUrl = url.startsWith(devBase)
+        ? url
+        : path.posix.join(devBase, url)
+
       if (server && shouldPreTransform(url, config)) {
         preTransformRequest(server, fullUrl, devBase)
       }
