@@ -263,7 +263,7 @@ export function resolvePlugin(resolveOptions: InternalResolveOptions): Plugin {
           // Inject the current browserHash version if the path doesn't have one
           if (
             !resolveOptions.isBuild &&
-            !normalizedFsPath.match(DEP_VERSION_RE)
+            !DEP_VERSION_RE.test(normalizedFsPath)
           ) {
             const browserHash = optimizedDepInfoFromFile(
               depsOptimizer.metadata,
@@ -501,7 +501,7 @@ function ensureVersionQuery(
     // file path after symlinks resolution
     const isNodeModule = isInNodeModules(id) || isInNodeModules(resolved)
 
-    if (isNodeModule && !resolved.match(DEP_VERSION_RE)) {
+    if (isNodeModule && !DEP_VERSION_RE.test(resolved)) {
       const versionHash = depsOptimizer.metadata.browserHash
       if (versionHash && isOptimizable(resolved, depsOptimizer.options)) {
         resolved = injectQuery(resolved, `v=${versionHash}`)
@@ -1299,7 +1299,7 @@ function equalWithoutSuffix(path: string, key: string, suffix: string) {
 }
 
 function getRealPath(resolved: string, preserveSymlinks?: boolean): string {
-  if (!preserveSymlinks && browserExternalId !== resolved) {
+  if (!preserveSymlinks) {
     resolved = safeRealpathSync(resolved)
   }
   return normalizePath(resolved)

@@ -1,6 +1,5 @@
 import path from 'node:path'
 import { parse as parseUrl } from 'node:url'
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import { Buffer } from 'node:buffer'
 import * as mrmime from 'mrmime'
@@ -17,6 +16,7 @@ import {
 } from '../build'
 import type { Plugin } from '../plugin'
 import type { ResolvedConfig } from '../config'
+import { checkPublicFile } from '../publicDir'
 import {
   cleanUrl,
   getHash,
@@ -249,31 +249,6 @@ export function assetPlugin(config: ResolvedConfig): Plugin {
   }
 }
 
-export function checkPublicFile(
-  url: string,
-  { publicDir }: ResolvedConfig,
-): string | undefined {
-  // note if the file is in /public, the resolver would have returned it
-  // as-is so it's not going to be a fully resolved path.
-  if (!publicDir || url[0] !== '/') {
-    return
-  }
-  const publicFile = path.join(publicDir, cleanUrl(url))
-  if (
-    !normalizePath(publicFile).startsWith(
-      withTrailingSlash(normalizePath(publicDir)),
-    )
-  ) {
-    // can happen if URL starts with '../'
-    return
-  }
-  if (fs.existsSync(publicFile)) {
-    return publicFile
-  } else {
-    return
-  }
-}
-
 export async function fileToUrl(
   id: string,
   config: ResolvedConfig,
@@ -354,6 +329,7 @@ async function fileToBuiltUrl(
   config: ResolvedConfig,
   pluginContext: PluginContext,
   skipPublicCheck = false,
+  shouldInline?: boolean,
 ): Promise<string> {
   if (!skipPublicCheck && checkPublicFile(id, config)) {
     return publicFileToBuiltUrl(id, config)
@@ -368,15 +344,18 @@ async function fileToBuiltUrl(
   const file = cleanUrl(id)
   const content = await fsp.readFile(file)
 
+  if (shouldInline == null) {
+    shouldInline =
+      !!config.build.lib ||
+      // Don't inline SVG with fragments, as they are meant to be reused
+      (!(file.endsWith('.svg') && id.includes('#')) &&
+        !file.endsWith('.html') &&
+        content.length < Number(config.build.assetsInlineLimit) &&
+        !isGitLfsPlaceholder(content))
+  }
+
   let url: string
-  if (
-    config.build.lib ||
-    // Don't inline SVG with fragments, as they are meant to be reused
-    (!(file.endsWith('.svg') && id.includes('#')) &&
-      !file.endsWith('.html') &&
-      content.length < Number(config.build.assetsInlineLimit) &&
-      !isGitLfsPlaceholder(content))
-  ) {
+  if (shouldInline) {
     if (config.build.lib && isGitLfsPlaceholder(content)) {
       config.logger.warn(
         colors.yellow(`Inlined file ${id} was not downloaded via Git LFS`),
@@ -417,6 +396,7 @@ export async function urlToBuiltUrl(
   importer: string,
   config: ResolvedConfig,
   pluginContext: PluginContext,
+  shouldInline?: boolean,
 ): Promise<string> {
   if (checkPublicFile(url, config)) {
     return publicFileToBuiltUrl(url, config)
@@ -431,6 +411,7 @@ export async function urlToBuiltUrl(
     pluginContext,
     // skip public check since we just did it above
     true,
+    shouldInline,
   )
 }
 
